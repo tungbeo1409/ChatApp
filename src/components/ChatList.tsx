@@ -79,34 +79,7 @@ const ChatList = ({ currentUser, onSelectChat, selectedChatId }: ChatListProps) 
     };
   }, [currentUser.uid]);
 
-  const handleStartChat = async (otherUserId: string) => {
-    // Kiểm tra xem đã có chat với user này chưa
-    const existingChat = chats.find(chat => 
-      chat.participants.includes(otherUserId) && 
-      chat.participants.length === 2
-    );
-
-    if (existingChat) {
-      onSelectChat(existingChat.id);
-      setShowUserList(false);
-      return;
-    }
-
-    // Tạo chat mới
-    try {
-      const newChat = {
-        participants: [currentUser.uid, otherUserId],
-        createdAt: new Date(),
-        lastMessageTime: null
-      };
-
-      const docRef = await addDoc(collection(db, 'chats'), newChat);
-      onSelectChat(docRef.id);
-      setShowUserList(false);
-    } catch (error) {
-      console.error('Lỗi tạo chat:', error);
-    }
-  };
+  // Tạo chat mới sẽ được xử lý trong handleSendQuickMessage khi cần
 
   const handleOpenCompose = (user: any) => {
     setComposeForUser(user);
@@ -175,10 +148,8 @@ const ChatList = ({ currentUser, onSelectChat, selectedChatId }: ChatListProps) 
     return users.find(user => user.id === partnerId);
   };
 
-  const filteredUsers = users.filter(user =>
-    (user.displayName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (user.email || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Bộ lọc tại ô tìm phía trên sidebar (giữ để lọc nhanh danh sách hiển thị)
+  // Hiện tại không dùng trực tiếp, nhưng giữ logic nếu muốn mở rộng
 
   const filteredUsersInModal = users.filter(user =>
     (user.displayName || '').toLowerCase().includes(userSearchTerm.toLowerCase()) ||

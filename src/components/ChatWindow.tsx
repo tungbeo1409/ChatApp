@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   collection, 
   query, 
-  where, 
   orderBy, 
   onSnapshot, 
   addDoc, 
@@ -11,7 +10,7 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { User, Message } from '../types';
+import { User, Message, Chat } from '../types';
 import './ChatWindow.css';
 
 interface ChatWindowProps {
@@ -33,7 +32,7 @@ const ChatWindow = ({ currentUser, chatId, onBack }: ChatWindowProps) => {
     const chatRef = doc(db, 'chats', chatId);
     const unsubscribeChat = onSnapshot(chatRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
-        const chatData = { id: docSnapshot.id, ...docSnapshot.data() };
+        const chatData = { id: docSnapshot.id, ...(docSnapshot.data() as any) } as Chat & { id: string };
         setChat(chatData);
         
         // Lấy thông tin partner
