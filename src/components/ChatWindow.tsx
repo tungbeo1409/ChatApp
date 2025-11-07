@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { 
   collection, 
   query, 
@@ -9,7 +9,8 @@ import {
   doc,
   serverTimestamp 
 } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase/config';
 import { User, Message, Chat } from '../types';
 import './ChatWindow.css';
 
@@ -23,9 +24,14 @@ const ChatWindow = ({ currentUser, chatId, onBack }: ChatWindowProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [partner, setPartner] = useState<any>(null);
-  const [chat, setChat] = useState<any>(null);
+  const [chat, setChat] = useState<(Chat & { id: string }) | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
   useEffect(() => {
     // Lấy thông tin chat
@@ -75,16 +81,110 @@ const ChatWindow = ({ currentUser, chatId, onBack }: ChatWindowProps) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const handleAttachmentUpload = async (file: File, type: 'image' | 'file') => {
+    if (!chat) return;
+    if (!file) return;
+    if (file.size > MAX_FILE_SIZE) {
+      setUploadError('File quá lớn (tối đa 10MB).');
+      return;
+    }
+
+    const receiverId = chat.participants.find((id: string) => id !== currentUser.uid);
+    if (!receiverId) return;
+
+    try {
+      setUploadError('');
+      setUploading(true);
+
+      const storageRef = ref(storage, `chats/${chatId}/${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+
+      const caption = newMessage.trim();
+      const messagePayload: any = {
+        senderId: currentUser.uid,
+        receiverId,
+        timestamp: serverTimestamp(),
+        createdAt: new Date(),
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        fileUrl: downloadURL
+      };
+
+      if (caption) {
+        messagePayload.text = caption;
+      }
+
+      if (type === 'image') {
+        messagePayload.imageUrl = downloadURL;
+      }
+
+      await addDoc(collection(db, 'chats', chatId, 'messages'), messagePayload);
+
+      await updateDoc(doc(db, 'chats', chatId), {
+        lastMessage: {
+          text: caption || (type === 'image' ? 'Đã gửi một hình ảnh' : file.name || 'Đã gửi một tệp'),
+          senderId: currentUser.uid,
+          imageUrl: type === 'image' ? downloadURL : undefined,
+          fileName: type === 'file' ? file.name : undefined,
+          type
+        },
+        lastMessageTime: serverTimestamp()
+      });
+
+      if (caption) {
+        setNewMessage('');
+      }
+    } catch (error) {
+      console.error('Lỗi gửi tệp:', error);
+      setUploadError('Không thể gửi tệp. Vui lòng thử lại.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleAttachmentUpload(file, 'image');
+    }
+    if (imageInputRef.current) {
+      imageInputRef.current.value = '';
+    }
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleAttachmentUpload(file, 'file');
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const openImagePicker = () => {
+    imageInputRef.current?.click();
+  };
+
+  const openFilePicker = () => {
+    fileInputRef.current?.click();
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !chat) return;
 
     try {
+      setUploadError('');
       const messagesRef = collection(db, 'chats', chatId, 'messages');
+      const receiverId = chat.participants.find((id: string) => id !== currentUser.uid);
+      if (!receiverId) return;
       await addDoc(messagesRef, {
         text: newMessage.trim(),
         senderId: currentUser.uid,
-        receiverId: chat.participants.find((id: string) => id !== currentUser.uid),
+        receiverId,
         timestamp: serverTimestamp(),
         createdAt: new Date()
       });
@@ -94,7 +194,8 @@ const ChatWindow = ({ currentUser, chatId, onBack }: ChatWindowProps) => {
       await updateDoc(chatRef, {
         lastMessage: {
           text: newMessage.trim(),
-          senderId: currentUser.uid
+          senderId: currentUser.uid,
+          type: 'text'
         },
         lastMessageTime: serverTimestamp()
       });
@@ -131,6 +232,13 @@ const ChatWindow = ({ currentUser, chatId, onBack }: ChatWindowProps) => {
       month: 'long',
       year: 'numeric'
     });
+  };
+
+  const formatFileSize = (size?: number) => {
+    if (!size) return '';
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const groupMessagesByDate = () => {
@@ -190,14 +298,49 @@ const ChatWindow = ({ currentUser, chatId, onBack }: ChatWindowProps) => {
               </div>
               {dateMessages.map((message) => {
                 const isOwn = message.senderId === currentUser.uid;
+                const fileSizeLabel = formatFileSize(message.fileSize);
+                const timeLabel = formatTime(message.timestamp);
                 return (
                   <div
                     key={message.id}
                     className={`message ${isOwn ? 'own' : 'other'}`}
                   >
                     <div className="message-bubble">
-                      <p className="message-text">{message.text}</p>
-                      <span className="message-time">{formatTime(message.timestamp)}</span>
+                      {message.imageUrl && (
+                        <a
+                          href={message.imageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="message-image-wrapper"
+                        >
+                          <img src={message.imageUrl} alt="Hình ảnh" className="message-image" />
+                        </a>
+                      )}
+
+                      {message.fileUrl && !message.imageUrl && (
+                        <a
+                          href={message.fileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="message-file"
+                        >
+                          <div className="file-icon">📎</div>
+                          <div className="file-info">
+                            <span className="file-name">{message.fileName || 'Tệp đính kèm'}</span>
+                            {fileSizeLabel && (
+                              <span className="file-size">{fileSizeLabel}</span>
+                            )}
+                          </div>
+                        </a>
+                      )}
+
+                      {message.text && (
+                        <p className="message-text">{message.text}</p>
+                      )}
+
+                      <div className="message-meta">
+                        <span className="message-time">{timeLabel}</span>
+                      </div>
                     </div>
                   </div>
                 );
@@ -209,15 +352,59 @@ const ChatWindow = ({ currentUser, chatId, onBack }: ChatWindowProps) => {
       </div>
 
       <form onSubmit={handleSendMessage} className="message-input-container">
+        <input
+          type="file"
+          accept="image/*"
+          ref={imageInputRef}
+          className="hidden-file-input"
+          onChange={handleImageChange}
+        />
+        <input
+          type="file"
+          ref={fileInputRef}
+          className="hidden-file-input"
+          onChange={handleFileChange}
+        />
+
+        {uploadError && <div className="upload-error">{uploadError}</div>}
+        {uploading && <div className="upload-status">Đang gửi tệp...</div>}
+
         <div className="message-input-wrapper">
+          <div className="attachment-actions">
+            <button
+              type="button"
+              className="attachment-btn"
+              onClick={openFilePicker}
+              title="Gửi tệp"
+              disabled={uploading}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M16.5 6.5l-5.79 5.79a2 2 0 01-2.83-2.83l6.1-6.1a4 4 0 015.66 5.66l-7.07 7.07a6 6 0 11-8.49-8.49l5.66-5.66" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="attachment-btn"
+              onClick={openImagePicker}
+              title="Gửi hình ảnh"
+              disabled={uploading}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M21 19V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 17l4.5-4.5L12 17l3-3 6 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="8.5" cy="7.5" r="1.5" />
+              </svg>
+            </button>
+          </div>
           <input
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Nhập tin nhắn..."
+            placeholder="Nhập tin nhắn hoặc chú thích cho tệp..."
             className="message-input"
+            disabled={uploading}
           />
-          <button type="submit" className="send-btn" disabled={!newMessage.trim()}>
+          <button type="submit" className="send-btn" disabled={!newMessage.trim() || uploading}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
             </svg>

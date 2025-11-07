@@ -7,17 +7,29 @@ export interface User {
 
 export interface Message {
   id: string;
-  text: string;
+  text?: string;
   senderId: string;
   receiverId: string;
   timestamp: Date;
   imageUrl?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
 }
+
+export type MessagePreviewType = 'text' | 'image' | 'file';
 
 export interface Chat {
   id: string;
   participants: string[];
-  lastMessage?: Message;
+  lastMessage?: {
+    text?: string;
+    senderId: string;
+    imageUrl?: string;
+    fileName?: string;
+    type?: MessagePreviewType;
+  };
   lastMessageTime?: Date;
 }
 

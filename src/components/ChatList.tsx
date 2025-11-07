@@ -108,7 +108,7 @@ const ChatList = ({ currentUser, onSelectChat, selectedChatId }: ChatListProps) 
           participants: [currentUser.uid, composeForUser.id],
           createdAt: new Date(),
           lastMessageTime: serverTimestamp(),
-          lastMessage: { text: composeMessage.trim(), senderId: currentUser.uid }
+          lastMessage: { text: composeMessage.trim(), senderId: currentUser.uid, type: 'text' }
         };
         const chatRef = await addDoc(collection(db, 'chats'), newChat);
         chatId = chatRef.id;
@@ -128,7 +128,8 @@ const ChatList = ({ currentUser, onSelectChat, selectedChatId }: ChatListProps) 
       await updateDoc(doc(db, 'chats', chatId!), {
         lastMessage: {
           text: composeMessage.trim(),
-          senderId: currentUser.uid
+          senderId: currentUser.uid,
+          type: 'text'
         },
         lastMessageTime: serverTimestamp()
       });
@@ -155,6 +156,34 @@ const ChatList = ({ currentUser, onSelectChat, selectedChatId }: ChatListProps) 
     (user.displayName || '').toLowerCase().includes(userSearchTerm.toLowerCase()) ||
     (user.email || '').toLowerCase().includes(userSearchTerm.toLowerCase())
   );
+
+  const getLastMessagePreview = (chat: any) => {
+    if (!chat.lastMessage) return 'Chưa có tin nhắn';
+    const { type, text, fileName } = chat.lastMessage;
+    if (type === 'image') return '📷 Đã gửi một hình ảnh';
+    if (type === 'file') return `📎 ${fileName || 'Đã gửi một tệp'}`;
+    return text || 'Tin nhắn mới';
+  };
+
+  const getLastMessageTimeLabel = (lastMessageTime: any) => {
+    if (!lastMessageTime) return '';
+    try {
+      let date: Date;
+      if (typeof lastMessageTime.toDate === 'function') {
+        date = lastMessageTime.toDate();
+      } else if (lastMessageTime.seconds) {
+        date = new Date(lastMessageTime.seconds * 1000);
+      } else {
+        date = new Date(lastMessageTime);
+      }
+      return date.toLocaleTimeString('vi-VN', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return '';
+    }
+  };
 
   const handleFindByEmail = async () => {
     setModalError('');
@@ -309,9 +338,20 @@ const ChatList = ({ currentUser, onSelectChat, selectedChatId }: ChatListProps) 
             <p className="empty-hint">Nhấn vào nút + để bắt đầu</p>
           </div>
         ) : (
-          chats.map(chat => {
+          chats
+            .filter(chat => {
+              if (!searchTerm.trim()) return true;
+              const partner = getChatPartner(chat);
+              const term = searchTerm.toLowerCase();
+              return partner && (
+                (partner.displayName || '').toLowerCase().includes(term) ||
+                (partner.email || '').toLowerCase().includes(term)
+              );
+            })
+            .map(chat => {
             const partner = getChatPartner(chat);
             if (!partner) return null;
+            const timeLabel = getLastMessageTimeLabel(chat.lastMessageTime);
 
             return (
               <div
@@ -327,18 +367,13 @@ const ChatList = ({ currentUser, onSelectChat, selectedChatId }: ChatListProps) 
                 <div className="chat-info">
                   <div className="chat-header-info">
                     <span className="chat-name">{partner.displayName || partner.email}</span>
-                    {chat.lastMessageTime && (
-                      <span className="chat-time">
-                        {new Date(chat.lastMessageTime.seconds * 1000).toLocaleTimeString('vi-VN', {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </span>
+                    {timeLabel && (
+                      <span className="chat-time">{timeLabel}</span>
                     )}
                   </div>
                   <div className="chat-last-message">
                     {chat.lastMessage ? (
-                      <span>{chat.lastMessage.text || 'Hình ảnh'}</span>
+                      <span>{getLastMessagePreview(chat)}</span>
                     ) : (
                       <span className="no-message">Chưa có tin nhắn</span>
                     )}

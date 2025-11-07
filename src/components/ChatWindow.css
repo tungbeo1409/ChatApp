@@ -148,6 +148,9 @@
   border-radius: 8px;
   position: relative;
   word-wrap: break-word;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .message.own .message-bubble {
@@ -168,13 +171,64 @@
   word-wrap: break-word;
 }
 
+.message-meta {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .message-time {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.6);
-  float: right;
-  margin-left: 8px;
-  margin-top: 4px;
   white-space: nowrap;
+}
+
+.message-image-wrapper {
+  display: block;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.message-image {
+  width: 100%;
+  max-width: 320px;
+  border-radius: 8px;
+  display: block;
+}
+
+.message-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  background-color: rgba(0, 0, 0, 0.15);
+  padding: 10px;
+  border-radius: 8px;
+  color: #e9edef;
+}
+
+.message.other .message-file {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.file-icon {
+  font-size: 20px;
+}
+
+.file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #e9edef;
+}
+
+.file-size {
+  font-size: 12px;
+  color: #bcc0c4;
 }
 
 .message-input-container {
@@ -190,6 +244,50 @@
   background-color: #2a3942;
   border-radius: 24px;
   padding: 8px 16px;
+}
+
+.attachment-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.attachment-btn {
+  background: none;
+  border: none;
+  color: #8696a0;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.attachment-btn:hover:not(:disabled) {
+  background-color: #3b4a54;
+  color: #00a884;
+}
+
+.attachment-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.upload-error {
+  color: #f15c6d;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.upload-status {
+  color: #8696a0;
+  font-size: 13px;
+  margin-bottom: 6px;
 }
 
 .message-input {
